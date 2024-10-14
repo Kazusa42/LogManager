@@ -4,7 +4,7 @@
 # Author: Zhang
 #
 # Create Date: 2024/10/09
-# Last Update on: 2024/10/10
+# Last Update on: 2024/10/13
 #
 # FILE: main.py
 # Description: main loop entry of the project
@@ -13,81 +13,63 @@
 import os
 import argparse
 
-import utils.component as comps
+import utils.logAnalyst as logAnalyst
 import utils.functions as funcs
+import utils.component as comps
 
 
 def main():
+
+    comps.Const.RESULT_DIR = os.path.join(os.path.dirname(__file__), 'analysis_results')
+    comps.Const.LOG_DIR = os.path.join(os.path.dirname(__file__), 'logs')
+
     parser = argparse.ArgumentParser(description='Process a log file and analyze distance measurements.')
+    args_dict = funcs.arg_parse(parser=parser)
 
-    parser.add_argument('-d', '--distance', type=float, required=True, help='The real distance for comparison')
-    parser.add_argument('-f', '--file', type=str, default='', help='The path to the log file (can be empty)')
-    parser.add_argument('-n', '--numOfData', type=int, default=250, help='The number of data which will be used to analyze.')
-    parser.add_argument('-w', '--warmUpSamples', type=int, default=10, help='The number of data will be ignore the at first')
-
-    args = parser.parse_args()
-
-    real_distance = args.distance
-    log_file_path = args.file
-    analysis_samples = args.numOfData
-    warm_up_samples = args.warmUpSamples
-
-    curr_path = os.path.dirname(__file__)
-
-    if log_file_path == '':
-        log_folder = os.path.join(curr_path, 'log')
-        log_files = [f for f in os.listdir(log_folder) if f.endswith('.log')]
-
-        if not log_files:
-            print("No .log files found in the 'log' folder.")
-            return
-
-        print("Please choose a log file from the list below:")
-        for idx, log_file in enumerate(log_files):
-            print(f"{idx + 1}. {log_file}")
-        
-        try:
-            choice = int(input("Enter the number corresponding to your choice: ")) - 1
-            if 0 <= choice < len(log_files):
-                log_file_path = os.path.join(log_folder, log_files[choice])
-            else:
-                print("Invalid choice.")
-                return
-        except ValueError:
-            print("Invalid input. Please enter a number.")
-            return
-    else:
-        if not os.path.isabs(log_file_path):
-            log_file_path = os.path.join(os.path.join(curr_path, 'log'), log_file_path)
-
-    if not os.path.isfile(log_file_path):
-        print(f"The file {log_file_path} does not exist.")
-        return
-
-    log_manager = comps.LogManager(log_file_path, real_distance)
-    analysis_result = log_manager.analysis(warm_up_samples=warm_up_samples, analysis_samples=analysis_samples)
-
-    log_manager.print_result(analysis_result)
-
-    save_path = funcs.generate_result_file_path(
-        log_file_path=log_file_path,
-        curr_path=curr_path
+    analyst = logAnalyst.LogAnalyst(
+        warm_up_samples=args_dict['-w'],
+        analysis_samples=args_dict['-n'],
+        save_dir=comps.Const.RESULT_DIR
     )
-    log_manager.save_results(save_path)
+
+    if args_dict['-a']:
+        # Process all log files under log folder
+        log_files = [f for f in os.listdir(comps.Const.LOG_DIR) if f.endswith('.log')]
+        for curr in log_files:
+            funcs.analysis(
+                analyst=analyst,
+                log_file_name=curr,
+                log_dir=comps.Const.LOG_DIR,
+                phy_distance=args_dict['-d']
+            )
+            # analyst.show_result()
+        pass
+    else:  # process single file at once
+        # get file name from input args 
+        log_file_name = funcs.get_filename(args_dict['-f'])
+        if log_file_name is not None and log_file_name.endswith('.log'):  # reveived a log file
+            funcs.analysis(
+                analyst=analyst,
+                log_file_name=log_file_name,
+                log_dir=comps.Const.LOG_DIR,
+                phy_distance=args_dict['-d']
+            )
+            analyst.show_result()
+        else:
+            # list all log files in 'logs' directory to let user choose one or more
+            print("Failure to receive a valid log file. Display all log files under folder 'logs'")
+            while True:
+                log_file_name = funcs.chose_log_file(directory=comps.Const.LOG_DIR)
+                funcs.analysis(
+                    analyst=analyst,
+                    log_file_name=log_file_name,
+                    log_dir=comps.Const.LOG_DIR,
+                    phy_distance=args_dict['-d']
+                )
+                analyst.show_result()
+            
+
 
 if __name__ == "__main__":
-    if_terminal = True  # if do not want to run script in trminal mode, change the value to False
-    
-    if if_terminal:
-        main()
-    else:
-        real_distance = 0.5  # physical distance (m)
-        log_file_path = r'your_log_file.log'  # absolute path of log file (including file name)
-        save_path = r'save_path.xlsx'  # absolute path of result file (including file name, must be excel file)
-        warm_up = 10  # the number of ranging results will be ignored at first
-        data_len = 250  # the number of data will be used to analyze
+    main()
 
-        log_manager = comps.LogManager(log_file_path, real_distance)
-        analysis_result = log_manager.analysis(warm_up=warm_up, data_len=data_len)
-        log_manager.print_result(analysis_result)
-        log_manager.save_results(save_path)
