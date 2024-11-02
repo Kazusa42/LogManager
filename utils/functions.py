@@ -37,12 +37,11 @@ from utils.device import Device
 #------------------------- FUNCTIONS FOR LOG ANALYST -----------------------------
 
 def logAnalyst_arg_parser(parser: argparse.ArgumentParser):
-    parser.add_argument('-a', '--all', action='store_true', help='Process all log files under log folder.')
-    parser.add_argument('-f', '--file', type=str, default='', help='The path to the interest log file (can be empty).')
-
-    parser.add_argument('-w', '--warmupSamples', type=int, default=10, help='The number of data will be ignore the at first.')
-    parser.add_argument('-n', '--analysisSamples', type=int, default=250, help='The number of data which will be used to analyze.')
-    parser.add_argument('-d', '--physicalDistance', type=float, default=float('NaN'), help='Physical distance (cm) for comparison.')
+    parser.add_argument('-a', '--all', action='store_true')
+    parser.add_argument('-f', '--file', type=str, default=None)
+    parser.add_argument('-d', '--physicalDistance', type=float, default=float('inf'))
+    parser.add_argument('-w', '--warmupSamples', type=int, default=10)
+    parser.add_argument('-n', '--analysisSamples', type=int, default=250)
 
     args = parser.parse_args()
 
@@ -54,34 +53,26 @@ def logAnalyst_arg_parser(parser: argparse.ArgumentParser):
         '-d': args.physicalDistance
     }
 
-def try_parse_phy_distance_from_filename(filename: str) -> float: 
-    match = re.search(r"(\d+(\.\d+)?)(cm|m)", filename)
-    if match:
-        unit = match.group(3)
-        # change the unit of distance to cm
-        distance = float(match.group(1)) if unit == 'cm' else float(match.group(1)) * 100
-        return distance
-    return float('NaN')
-
-def get_filename(filename: str) -> str:
-    return os.path.basename(filename) if filename else None
-
 def chose_log_file(directory: str) -> str:
-    # list all log files under 'directory' directory
-    # and let user chose on of them
-    # return the choosed file name
+    # list all log files under 'logs' directory and let user chose on of them
+    # return the choosed log file name
     log_files = [f for f in os.listdir(directory) if f.endswith('.log')]
     if not log_files:
         print('No log files found in the "log" folder.')
         return None
-    print(f"{' Index':<7} {' File name':<20}")
-    print('-' * 20)
+    print(f"{' Index':<7} {' File name':<20}\n" + '-' * 20)
     for idx, log_file in enumerate(log_files):
         print(f" {(idx + 1):<7} {log_file:<20}")
     
-    try: 
-        choice = int(input('Enter the index for a log file.')) - 1
-        if 0 <= choice < len(log_files):
+    try:
+        user_input = input('Enter the index for a log file.')
+        if user_input.startswith('exit'):
+            sys.exit('Exiting by user input...')
+
+        choice = int(user_input) - 1
+        if choice == 'exit':
+            sys.exit()
+        elif 0 <= choice < len(log_files):
             return log_files[choice]
         else:
             print('Invalid choice.')
@@ -90,21 +81,35 @@ def chose_log_file(directory: str) -> str:
         print('Invalid input. Please input a number.')
         return None
 
-def analysis(analyst: LogAnalyst, log_file_name: str, log_dir: str, phy_distance: float):
-    if math.isnan(phy_distance):
-        true_distance = try_parse_phy_distance_from_filename(log_file_name)
+def construct_save_file_path(log_file_name: str, result_dir: str, ext=r'xlsx') -> str:
+    filename = log_file_name.split('.log')[0]
+    res_filename = f"{filename}_analysis.{ext}"
+    return os.path.join(result_dir, res_filename)
+
+def parse_phy_distance(phy_distance: float, filename: str) -> float:
+    if math.isinf(phy_distance):
+        match = re.search(r"(\d+(\.\d+)?)(cm|m)", filename)
+        if match:
+            unit = match.group(3)
+            phy_dist = float(match.group(1)) if unit == 'cm' else float(match.group(1)) * 100
+        else:
+            phy_dist = float('inf')
     else:
-        true_distance = phy_distance
+        phy_dist = phy_distance
+    return phy_dist
 
-    if not math.isnan(true_distance):
-        # change the unit of true_distance to cm
-        # this code is fragile
-        true_distance = true_distance if true_distance > 10 else true_distance * 100
-
-    analyst.analysis(
-        log_file_path=os.path.join(log_dir, log_file_name),
-        true_distance=true_distance  # here the unit of true_distance is cm already
-    )
+def analysis(analyst: LogAnalyst, log_file_path: str, phy_distance: float, visual=True):
+    file_type = analyst.read_log_file(log_file_path)
+    print(f"log format: {file_type}")
+    if file_type is None:
+        raise ValueError('Unsupported log file format.')
+    
+    analyst.extract_distance(file_type)
+    for device_id in analyst.distances.keys():
+        analyst.analysis(phy_distance, device_id)  # analysis
+        if visual:
+            analyst.show_result(device_id)  # show results on terminal
+    
 
 #------------------------ FUNCTIONS FOR RANGING DEMO -----------------------------
 
