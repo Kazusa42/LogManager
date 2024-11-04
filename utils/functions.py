@@ -19,6 +19,7 @@ import sys
 import math
 import json
 import time
+import socket
 import argparse
 import platform
 
@@ -114,12 +115,11 @@ def analysis(analyst: LogAnalyst, log_file_path: str, phy_distance: float, visua
 #------------------------ FUNCTIONS FOR RANGING DEMO -----------------------------
 
 def rangingDemo_arg_parser(parser: argparse.ArgumentParser):
-    parser.add_argument('-r', '--role', type=str, default=None, help='The role of current device')
-    parser.add_argument('-cp', '--comPort', type=str, default=None, help='COM port for current device')
-    parser.add_argument('-tp', '--tcpPort', type=str, default=r'20020', help='TCP port for current device')
-    parser.add_argument('-d', '--distance', type=float, default=float('NaN'), help='Physical distance for this ranging')
-    parser.add_argument('-p', '--power', type=int, default=5, help='Transmission power for current device')
-    parser.add_argument('-t', '--time', type=int, default=600, help='Ranging time with unit ms.')
+    parser.add_argument('-r', '--role', type=str, default=None)
+    parser.add_argument('-c', '--comPort', type=str, default=None)
+    parser.add_argument('-d', '--distance', type=float, default=float('inf'))
+    parser.add_argument('-p', '--power', type=int, default=5)
+    parser.add_argument('-t', '--time', type=int, default=600)
     
     args = parser.parse_args()
 
@@ -128,55 +128,14 @@ def rangingDemo_arg_parser(parser: argparse.ArgumentParser):
         '-d': args.distance,
         '-p': args.power,
         '-t': args.time,
-        '-cp': args.comPort,
-        '-tp': args.tcpPort,
+        '-c': args.comPort,
     }
-
-def clear_console():
-    if platform.system() == 'Windows':
-        os.system('cls')
-    else:
-        os.system('clear')
-
-def init_device(args_dict: dict, cmd_file_path: str, tcp_port=r'20020') -> Device:
-    role, com_port, power = None, None, float('NaN')
-
-    # init roll
-    role_mapping = {'tx': 'initiator', 'rx': 'responder',}
-    if args_dict['-r'] is not None:
-        role = role_mapping[args_dict['-r']]
-    else:
-        role = set_role(role_mapping=role_mapping)
-
-    cmds = load_commands(cmd_file_path=cmd_file_path, role=role)
-
-    # init com port
-    if args_dict['-cp'] is not None:
-        com_port = args_dict['-cp']
-    else:
-        com_port = select_com_port()
-
-    if 1 <= int(args_dict['-p']) <= 9:
-        power = int(args_dict['-p'])
-
-    device = Device(role=role, com_port=com_port, cmds=cmds, tcp_port=tcp_port, tx_power=power)
-    return device
-
-def load_commands(cmd_file_path: str, role: str) -> dict:
-    with open(cmd_file_path, 'r', encoding='utf-8') as f:
-        commands = json.load(f)
-
-    if role in commands.keys():
-        return commands[role]
-    else:
-        print(f'Invalid role: {role}.')
-        return None
 
 def welcome_menu_for_rangingdemo():
     """
     Displays a welcome message and user menu.
     """
-    clear_console()
+    os.system('cls') if platform.system() == 'Windows' else os.system('clear')
     print("----------------------------------------------------------------------------------")
     print("- UWB RANGING DEMO AUTOMATION TOOL FOR FIRA AND DEBBY")
     print("- INTERNAL USE ONLY @ RENESAS/A&C/CONN/ACENG")
@@ -188,12 +147,14 @@ def welcome_menu_for_rangingdemo():
     print("-                      : The transmission power of current device is default to 5.")
     print("----------------------------------------------------------------------------------")
 
+def load_commands(cmd_file_path: str, role: str) -> dict:
+    with open(cmd_file_path, 'r', encoding='utf-8') as f:
+        commands = json.load(f)
+    return commands[role]
+
 def select_com_port() -> str:
     ports = list(serial.tools.list_ports.comports())
     usb_serial_ports = [port for port in ports if 'USB Serial' in port.description]
-
-    if len(usb_serial_ports) >= 4:
-        print('Detected multiple UWB devices. Please assign different tcp ports for each device.')
 
     if usb_serial_ports:
         print("Available USB serial COM ports:")
@@ -214,34 +175,73 @@ def set_role(role_mapping) -> str:
         role = input("Invalid role. Please input a vaild role ('rx' for responder or 'tx' for initiator).")
     return role_mapping[role]
 
+def find_available_tcp_port(start_port=20020, host=r'127.0.0.1'):
+    port = start_port
+    while True:
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            try:
+                s.bind((host, port))
+                return port
+            except OSError:
+                port += 1
+
+def init_device(args_dict: dict, cmd_file_path: str) -> Device:
+    # init roll
+    role_mapping = {'tx': 'initiator', 'rx': 'responder'}
+    if args_dict['-r'] is not None:
+        role = role_mapping[args_dict['-r']]
+    else:
+        role = set_role(role_mapping)
+
+    # inti commands
+    cmds = load_commands(cmd_file_path, role)
+
+    # init COM port
+    if args_dict['-c'] is not None:
+        com_port = args_dict['-c']
+    else:
+        com_port = select_com_port()
+    
+    # init TCP port
+    tcp_port = find_available_tcp_port()
+
+    device = Device(role, cmds, com_port, tcp_port)
+    return device
+
 def name_log_file(device_role: str, distance: float) -> str:
     if device_role == 'initiator':
         return None
 
-    if not math.isnan(distance):
+    if not math.isinf(distance):
         return f"{str(int(distance))}cm.log"
     else:
-        user_input = input('Physical distance is not provided. Please input physical distance in cm: ')
-        return f"{str(user_input)}cm.log"
+        user_input = input('Create log file with name: ')
+        if user_input.isnumeric():
+            return f"{str(user_input)}cm.log"
+        else:
+            return f"{str(user_input)}.log"
 
 def run_ranging_demo(device: Device, ranging_time: int, cliserver_path: str, log_file=None):
-    device.start_tcp_conn(cliserver_path=cliserver_path)
+    # establish TCP connection
+    device.establish_tcp_conn(cliserver_path)
 
-    device.send_cmd('reset')     # example usage to reset device
-    device.send_cmd('boot')      # example usage to boot device
-    device.send_cmd('setpower')  # example usage of set tx power of current device
-    device.send_cmd('start')     # example usage to start ranging demo
+    # send all commands to start ranging demo
+    device.send_cmds()
 
+    # receive ranging demo message within ranging_time * 0.1s
     for i in range(0, ranging_time + 1):
-        device.recv(log_file=log_file)
-        if log_file is not None:
-            sys.stdout.flush()
-            print(f"Ranging progress: {float(i * 100 / ranging_time):.2f}%", end='\r')
+        device.receive(log_file=log_file)
+        sys.stdout.flush()
+        print(f"Ranging progress: {float(i * 100 / ranging_time):.2f}%", end='\r')
         time.sleep(0.1)
     print('Ranging completed.')
 
+    # close TCP connection for current device
     device.close_tcp_conn()
-    device.send_cmd('reset')
 
+    # close log file
     if log_file is not None:
         log_file.close()
+
+# END OF FILE
+#---------------------------------------------------------------------------------

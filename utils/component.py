@@ -7,13 +7,12 @@
 # Last Update on: 2024/10/12
 #
 # FILE: component.py
-# Description: Basic classes are defined here
+# Description: Basic components are defined here
 #---------------------------------------------------------------------------------
 
 #---------------------------------------------------------------------------------
 # IMPORT REQUIRED PACKAGES HERE
 
-import json
 
 # END OF PACKAGE IMPORT
 #---------------------------------------------------------------------------------
@@ -57,3 +56,6 @@ class Const:
 
         # Set the constant
         self.__dict__[name] = value
+
+# END OF FILE
+#---------------------------------------------------------------------------------

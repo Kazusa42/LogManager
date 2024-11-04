@@ -7,7 +7,7 @@
 # Last Update on: 2024/11/02
 #
 # FILE: logAnalyst.py
-# Description: Classes logAnalyst is defined here
+# Description: Classe LogAnalyst is defined here
 #---------------------------------------------------------------------------------
 
 #---------------------------------------------------------------------------------
@@ -26,7 +26,6 @@ from collections import defaultdict
 
 #---------------------------------------------------------------------------------
 # DEFINE CLASS HERE
-
 
 class LogAnalyst(object):
     def __init__(self, warmup_samples: int, analysis_samples: int) -> None:
@@ -135,16 +134,19 @@ class LogAnalyst(object):
         failed_cnt = len(self.distances[device_id]) - successed_cnt
         ranging_success_rate = successed_cnt / len(self.distances[device_id])
 
+        self.analysis_results = {}  # clear previous results
+
         self.analysis_results[device_id] = {
             'min distance (cm)': min_dist,
             'max distance (cm)': max_dist,
             'average distance (cm)': round(ave_dist, 2),
             'median distance (cm)': round(median_dist, 2),
+            'physical distance (cm)': physical_distance,
             'offset (real - ave.) (cm)': round(offset, 2),
             'std. deviation': round(stdev, 2),
             'success count': successed_cnt,
             'fail count': failed_cnt,
-            'success rate': round(ranging_success_rate, 2)
+            'success rate': f"{round(ranging_success_rate * 100, 2)}%"
         }
     
     def show_result(self, device_id):
@@ -172,7 +174,6 @@ class LogAnalyst(object):
 
 # END OF CLASS DEFINITION
 #---------------------------------------------------------------------------------
-
 
 if __name__ == '__main__':
     # interest log file (log file name)
@@ -203,6 +204,5 @@ if __name__ == '__main__':
 
     myAnalyst.save_result(save_file_path)  # save all results to one excel file
 
-    
 # END OF FILE
 #---------------------------------------------------------------------------------
