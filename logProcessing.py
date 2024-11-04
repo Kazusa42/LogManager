@@ -10,6 +10,9 @@
 # Description: option supported script for logAnalyst
 #---------------------------------------------------------------------------------
 
+#---------------------------------------------------------------------------------
+# IMPORT REQUIRED PACKAGES HERE
+
 import os
 import argparse
 
@@ -17,6 +20,8 @@ import utils.logAnalyst as logAnalyst
 import utils.functions as funcs
 import utils.component as comps
 
+# END OF PACKAGE IMPORT
+#---------------------------------------------------------------------------------
 
 def main():
 
@@ -67,7 +72,6 @@ def main():
 
             save_file_path = funcs.construct_save_file_path(filename, comps.Const.RESULT_DIR)
             analyst.save_result(save_file_path)
-            
         
         else:  # received a relative path from option
             filename = os.path.basename(args_dict['-f'])
@@ -83,3 +87,5 @@ def main():
 if __name__ == "__main__":
     main()
 
+# END OF FILE
+#---------------------------------------------------------------------------------
